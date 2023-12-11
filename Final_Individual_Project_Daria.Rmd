@@ -1,0 +1,541 @@
+---
+title: "Final Individual Project"
+author: "Daria Yakovleva"
+date: "2023-11-15"
+output: word_document
+always_allow_html: true
+---
+
+
+```{r}
+#Load libraries
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(rpart)
+library(plyr)
+library(dplyr)
+library(rpart.plot)
+library(maptree)
+library(faraway)
+library(gains)
+library(liftr)
+library(earth)
+library(lattice)
+library(Rprofet)
+library(ROCR)
+```
+
+
+```{r}
+#Load data
+data <- read.csv("/Users/Dasha/Desktop/Individual final project/rent_data_training.csv")
+#View(data)
+```
+
+
+```{r}
+#Remove outliers
+outlier_rent<- c(-6500, -13000,3500000, 4000000000000)
+data <- data[!(data$Rent %in% outlier_rent), ]
+
+#Calculate Z-scores for each data point
+z_scores <- scale(data$Rent)
+
+#Set a threshold for detecting outliers (adjust this as needed)
+#A common threshold is |Z-score| > 3, which corresponds to about 99.7% of data falling within the threshold.
+threshold <- 3
+
+# Find outliers based on the Z-score
+outliers <- which(abs(z_scores) > threshold, arr.ind = TRUE)
+
+# Print the indices of the outliers
+cat("Indices of Outliers:\n")
+print(outliers)
+```
+
+
+```{r}
+#Remove the outliers from the dataset
+
+data_clean <- data[-outliers[,1], ]
+
+#Print the cleaned dataset
+#print(data_clean)
+```
+
+
+```{r}
+# Assuming you have already cleaned the data and stored it in the 'data_clean' variable
+# You can replace 'cleaned_data.csv' with your desired file name
+
+# Save the cleaned data as a CSV file
+write.csv(data_clean, file = "cleaned_data.csv", row.names = FALSE)
+
+# Print a confirmation message
+cat("Cleaned data saved as 'cleaned_data.csv'\n")
+
+```
+
+
+```{r}
+data1<- read.csv("/Users/Dasha/Desktop/Individual final project/cleaned_data.csv")
+#View(data1)
+```
+
+
+```{r}
+#Finding rows with missing values
+rows_with_missing_values <- which(!complete.cases(data1))
+
+#Print the row indices with missing values
+cat("Row indices with missing values:\n")
+print(rows_with_missing_values)
+```
+
+
+#Barplot
+```{r}
+#Bar plot of Frequency of Properties by City
+ggplot(data1, aes(x = City, fill = City)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Frequency of Properties by City", x = "City", y = "Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+```{r}
+#Barplot of number of bathrooms
+ggplot(data1, aes(x = as.factor(BHK), fill = BHK)) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5) +
+  labs(title = "Count of BHK", x = "BHK", y = "Count") +
+  theme_minimal()
+```
+
+
+```{r}
+#Box plot of rent and number of bathroom
+data1_filtered <- data1[!(data1$Bathroom == 3 & data1$Rent > 100000), ]
+
+ggplot(data1_filtered, aes(x = as.factor(Bathroom), y = Rent)) +
+  geom_boxplot(fill = 'skyblue', color = 'black', alpha = 0.7) +
+  labs(title = 'Rent Distribution by Number of Bathrooms', x = 'Number of Bathrooms', y = 'Rent') +
+  theme_minimal()
+
+```
+
+
+#Histogram of the distribution of Rent
+```{r}
+ggplot(data1, aes(x = Rent)) +
+  geom_histogram(binwidth = 8000, fill = "hotpink4", color = 'black') + 
+  labs(x = "Rent", y = "Frequency", title = 'Distribution of the Rent')
+
+# Logarithmic transformation of the 'Rent' column
+log_Rent <- log(data1$Rent)
+ggplot(data1, aes(x = log_Rent)) +
+  geom_histogram(binwidth = 0.1, fill = "hotpink4", color = "black") + 
+  labs(x = "Log Rent", y = "Frequency", title = "Histogram of Log-Transformed Rent")
+
+#Scored Data
+data1 <- cbind(data1, log_Rent)
+
+```
+
+
+#Boxplots
+```{r}
+#Boxplots of log_rent
+par(mfrow = c(1, 1))
+boxplot(log_Rent~City,data=data1, 
+        main="Log of Rent by City", notch=TRUE,
+        col=(c("hotpink3", "pink2", "skyblue2", "yellow2", "green2", "darkorange2")),
+        xlab="City", ylab="Rent")
+
+boxplot(log_Rent~Furnishing.Status,data=data1, main="Log of Rent by Furnishing Status", notch=TRUE,
+        col=(c("hotpink3","pink2", "skyblue2")),
+        xlab="Furnishing Status", ylab="Rent")
+
+boxplot(log_Rent~BHK,data=data1, 
+        main="Log of Rent by BHK", 
+        col=(c("hotpink3", "pink2", "skyblue2", "yellow2", "green2", "darkorange2")),
+        xlab="BHK", ylab="Rent")
+
+boxplot(log_Rent~Area.Type,data=data1, 
+        main="Log of Rent by Area Type",
+        col=(c("hotpink3","pink2", "skyblue2")),
+        xlab="Area Type", ylab="Rent")
+
+boxplot(log_Rent~Tenant.Preferred,data=data1, 
+        main="Log of Rent by Tenant Preferred", notch=TRUE,
+        col=(c("hotpink3","pink2", "skyblue2")),
+        xlab="Tenant Preferred", ylab="Rent")
+
+boxplot(log_Rent~Point.of.Contact,data=data1, 
+        main="Log of Rent by Point of Contact", notch=TRUE,
+        col=(c("hotpink3","pink2", "skyblue2")),
+        xlab="Point of Contact", ylab="Rent")
+
+```
+
+
+```{r}
+#Boxplot of log_Rent by BHK and Furnishing Status
+ggplot(data1, aes(x = as.factor(BHK), y = log_Rent, fill = Furnishing.Status)) +
+  geom_boxplot() +
+  labs(title = 'Boxplot of log_Rent by BHK and Furnishing Status', x = 'BHK', y = 'log_Rent') +
+  theme_minimal()
+```
+
+
+#Count
+```{r}
+ggplot(data=data1) +
+  geom_count(mapping = aes( x= BHK, y = Furnishing.Status, color = log_Rent))+
+  scale_fill_gradient(low = "white", high = "navyblue")
+```
+
+
+#Scatter plot of log_Rent vs. Size. 
+```{r}
+#Scatter plot of log_Rent vs. size
+ggplot(data1, aes(x = Size, y = log_Rent)) +
+  geom_point(color = "navyblue", alpha = 0.7) +
+  labs(title = 'Scatter Plot of Size and Rent', x = 'Size', y = 'Rent') +
+  theme_minimal()
+```
+
+
+
+```{r}
+# Plotting Bar Plots of Rent by Area Type and BHK
+ggplot(data1, aes(x = Area.Type, y = log_Rent, fill = as.factor(BHK))) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
+  facet_wrap(~as.factor(BHK), scales = "free_y", ncol = 3) +
+  labs(title = 'Bar Plot of Rent by Area Type and BHK', x = 'Area Type', y = 'Rent') +
+  theme_minimal() +
+  theme(strip.text.x = element_text(size = 10), strip.background = element_blank(), 
+        axis.text.x = element_text(angle = 45, hjust = 1))  
+
+```
+
+
+#Correlation plot
+```{r}
+#Correlation plot
+library(corrplot)
+cor_matrix<-cor(data1[,c(2, 3, 10, 13)])
+
+par(mar = c(2, 2, 2, 2))
+corrplot(cor_matrix, addCoef.col = TRUE,number.cex=0.75)
+```
+
+
+
+```{r}
+#Remove entries with rent above 300,000 and when BHK = 1 and Bathroom = 1
+data1$Area.Type[data1$Area.Type == "Built Area"] <- "Carpet Area"
+filtered_data <- subset(data1, Rent <= 300000 & BHK == 1 & Bathroom == 1)
+
+#Use aggregate to calculate the average rent for each city in the filtered data
+average_rent_by_city <- aggregate(Rent ~ City, data = filtered_data, FUN = function(x) round(mean(x, na.rm = TRUE)))
+
+#Display the result
+print(average_rent_by_city)
+```
+
+
+#Association rules
+```{r include=FALSE}
+#Load libraries
+library(arules)
+library(arulesViz)
+```
+
+
+```{r}
+#Making a new variable "cheap_rent" based on Rent column and choosing breaks
+x <- 5700
+breaks2 <- c(-13000, x , 100000)
+
+#Bin data 
+filtered_data$cheap_rent <- cut(filtered_data$Rent, breaks = breaks2, labels = c("Low", "High")) 
+```
+
+
+```{r}
+#Choosing only categorical variables for the association rules
+cat_var <- filtered_data[, c("Floor", "Area.Type", "Area.Locality", "City", "Furnishing.Status", "Tenant.Preferred", "Point.of.Contact", "cheap_rent")]
+str(cat_var)
+```
+
+
+Also, I converted categorical columns to factors. 
+```{r include=FALSE}
+#Convert all categorical columns to factors
+cat_var <- as.data.frame(lapply(cat_var, factor))
+cat_var <- transactions(cat_var)
+itemLabels(cat_var)
+
+#Check the structure of the updated data frame
+str(cat_var)
+```
+
+
+```{r}
+#Perform association rules
+rules <- apriori(cat_var)
+inspect(rules)
+```
+
+
+```{r}
+itemFrequencyPlot(cat_var, topN=10, type='absolute',horiz=T,cex=0.7)
+```
+
+
+```{r include = FALSE}
+#Set rhs=c("cheap_rent=Low")
+rules <- apriori(cat_var, parameter = list(minlen=3, supp = .05, conf = .05),
+                 appearance = list(rhs=c("cheap_rent=Low"), default = "lhs"),
+                 control = list(verbose=T))
+inspect(rules)
+```
+
+
+
+```{r include = FALSE}
+#sort rules
+rules.sorted <- sort(rules, by="confidence")
+inspect(rules.sorted)
+```
+
+
+Now, we find redundant rules and remove them. 
+```{r}
+#Find redundant rules
+is.redundant(rules.sorted)
+
+rules.1 <- rules.sorted[!is.redundant(rules.sorted)]
+inspect(rules.1)
+```
+
+
+
+## Visualizing association rules
+Plotting the association rules. 
+```{r}
+plot(rules.1)
+plot(rules.1, method = "graph", control=list(type="items"))
+```
+
+
+Now, I am sorting the rules by confidence in descending order and chose the top 10 rules. Then, I plot the results for the rules for the three new variables that I have created in the beginning of the association rule. 
+
+```{r}
+#Fancy Plot
+plot(rules.1, method = "graph", measure = "support", shading = "confidence",
+     engine = 'visNetwork')
+```
+
+
+#Spliting data set into Train and Test datasets
+```{r}
+#Splitting the dataset into the Training set and Test set (80%/20%)
+set.seed(123)
+n = dim(data1)[1]
+split = sample(1:n,size = n*0.8, replace = F)
+
+#Train set
+train_set = data1[split,] 
+
+#Test set
+test_set = data1[-split,]
+```
+
+
+#Draw the tree and predict
+```{r}
+#Fitting Decision Tree Regression to the dataset
+tree = rpart(log_Rent ~ BHK + Size + Area.Type + City + Furnishing.Status + Tenant.Preferred + Bathroom + Point.of.Contact, 
+             data = train_set,
+             cp = 0.002,
+             minbucket = 150)
+
+#Prune Tree
+pruned = clip.rpart(tree, best = 7)
+```
+
+
+```{r}
+#Draw tree
+draw.tree (pruned, cex=0.8, 
+           nodeinfo = TRUE, units = "log_Rent",
+           cases ="obs",
+           digits = 3, print.levels = TRUE,
+           new = TRUE)
+
+#Predicting a new result with Decision Tree Regression
+tree_pred = predict(pruned, newdata = test_set) 
+```
+
+
+#Regression Model
+```{r}
+#Regression Model
+reg_model_1 <- lm(log_Rent ~ BHK + Size + Area.Type + City + Furnishing.Status + Tenant.Preferred + Bathroom + Point.of.Contact, data = train_set)
+summary(reg_model_1)
+```
+
+
+#Regression Model
+```{r}
+#Remove area type since it is not very significant
+reg_model_2 <- lm(log_Rent ~ BHK + Size + City + Furnishing.Status + Tenant.Preferred + Bathroom + Point.of.Contact, data = train_set)
+summary(reg_model_2)
+
+reg_pred<- predict(reg_model_2, newdata = test_set, type = "response")
+```
+
+
+#MARS Model
+```{r}
+train_set <- na.omit(train_set)
+mars <- earth(log_Rent ~ BHK + Area.Type + Size + City + Furnishing.Status + Tenant.Preferred + Bathroom + Point.of.Contact, data = train_set)
+summary(mars)
+
+mars_pred <- predict(mars, newdata = test_set, type = "response")
+```
+
+
+#Gains tables for the three models
+#Tree
+```{r}
+#Gains for tree
+treegains = gains(test_set$log_Rent, tree_pred)
+
+
+#Extract columns from gains object into data frame
+treegains_data <- data.frame(depth = treegains$depth,
+                           mean.prediction = treegains$mean.prediction,
+                           mean.response = treegains$mean.resp)
+
+#Plot of Depth against mean responses
+ggplot(treegains_data, aes(x = depth)) +
+  geom_line(aes(y = mean.prediction, color = "Predicted"), linetype = "dashed") +
+  geom_line(aes(y = mean.response, color = "Actual")) +
+  labs(x = "Depth", y = "Mean Response",
+       title = "Mean Response by Sampled Population for Tree Model") +
+  scale_color_manual(name = "Response", values = c("Predicted" = "blue", 
+                                                   "Actual" = "red")) +
+  theme_minimal()
+```
+
+
+```{r}
+# Data frame with actual and predicted values
+tree_results <- data.frame(log_Rent = test_set$log_Rent, 
+                            Predicted = tree_pred)
+```
+
+
+#Regression
+```{r}
+# Gains for Regression Model
+reggains = gains(test_set$log_Rent, reg_pred)
+ 
+
+# Extract columns from gains object into data frame
+reggains_data <- data.frame(depth = reggains$depth,
+                           mean.prediction = reggains$mean.prediction,
+                           mean.response = reggains$mean.resp)
+
+# Plot of Depth against mean responses
+ggplot(reggains_data, aes(x = depth)) +
+  geom_line(aes(y = mean.prediction, color = "Predicted"), linetype = "dashed") +
+  geom_line(aes(y = mean.response, color = "Actual")) +
+  labs(x = "Depth", y = "Mean Response",
+       title = "Mean Response by Sampled Population for Regression Model") +
+  scale_color_manual(name = "Response", values = c("Predicted" = "blue", 
+                                                   "Actual" = "red")) +
+  theme_minimal()
+```
+
+#MARS Model
+```{r} 
+# Gains for MARS Model
+marsgains = gains(test_set$log_Rent, mars_pred)
+ 
+
+# Extract columns from gains object into data frame
+marsgains_data <- data.frame(depth = marsgains$depth,
+                           mean.prediction = marsgains$mean.prediction,
+                           mean.response = marsgains$mean.resp)
+
+# Plot of Depth against mean responses
+ggplot(marsgains_data, aes(x = depth)) +
+  geom_line(aes(y = mean.prediction, color = "Predicted"), linetype = "dashed") +
+  geom_line(aes(y = mean.response, color = "Actual")) +
+  labs(x = "Depth", y = "Mean Response",
+       title = "Mean Response by Sampled Population for MARS Model") +
+  scale_color_manual(name = "Response", values = c("Predicted" = "blue", 
+                                                   "Actual" = "red")) +
+  theme_minimal()
+```
+# Prediction
+#Tree Prediction
+```{r}
+# Data frame with actual and predicted values
+tree_results <- data.frame(log_Rent = test_set$log_Rent, 
+                            Predicted = tree_pred)
+```
+
+
+```{r}
+#Regression
+#Data frame with actual and predicted values
+reg_results <- data.frame(log_Rent = test_set$log_Rent, 
+                            Predicted = reg_pred)
+
+reg_eval <- (1 / nrow(reg_results)) * sum(abs(exp(reg_results$log_Rent) - exp(reg_results$Predicted)) / exp(reg_results$log_Rent))
+print(reg_eval)
+```
+
+
+```{r}
+#Tree
+#Calculate the metric for the training data
+tree_eval <- (1 / nrow(tree_results)) * sum(abs(exp(tree_results$log_Rent) - exp(tree_results$Predicted)) / exp(tree_results$log_Rent))
+print(tree_eval)
+
+```
+
+
+```{r}
+#MARS
+#Data frame with actual and predicted values
+mars_results <- data.frame(log_Rent = test_set$log_Rent, 
+                            Predicted = mars_pred)
+
+mars_eval <- (1 / nrow(mars_results)) * sum(abs(exp(mars_results$log_Rent) - exp(mars_pred)) / exp(mars_results$log_Rent))
+print(mars_eval)
+```
+
+
+```{r}
+test_data<- read.csv("/Users/Dasha/Desktop/Individual final project/rent_data_test.csv")
+```
+
+
+```{r}
+mars_pred2 <- predict (mars, newdata = test_data, type = "response")
+
+Predict_Rent <- exp(mars_pred2)
+
+Predict_Rent_data <- cbind(test_data, Predict_Rent)
+write.csv(Predict_Rent_data, "Predicted_Rent.csv")
+```
+
